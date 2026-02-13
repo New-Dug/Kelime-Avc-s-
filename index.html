@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kelime Avcısı - Ultimate</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --glass-bg: rgba(255, 255, 255, 0.92);
+            --text-primary: #2563eb;
+            --accent-color: #3b82f6;
+        }
+
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: var(--bg-color);
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: background-color 0.5s ease;
+        }
+
+        #matrix-canvas {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 0; opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        .glass-panel {
+            z-index: 10;
+            background: var(--glass-bg);
+            backdrop-filter: blur(8px);
+            transition: background 0.3s ease;
+        }
+
+        .hangman-part { stroke-dasharray: 1000; stroke-dashoffset: 1000; transition: stroke-dashoffset 0.5s ease-in-out; opacity: 0.3; }
+        .hangman-part.visible { stroke-dashoffset: 0; opacity: 1; }
+
+        .letter-box { transition: all 0.2s ease; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .keyboard-btn:active { transform: scale(0.95); }
+
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .animate-bounce-custom { animation: bounce 0.6s infinite; }
+        
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
+        .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+
+        @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 80% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        .combo-text { position: absolute; font-size: 2rem; font-weight: bold; color: #fbbf24; text-shadow: 2px 2px 0px #000; animation: popIn 0.3s forwards; pointer-events: none; z-index: 50; }
+
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); z-index: 50; }
+        .timer-bar { transition: width 0.2s linear; }
+        
+        @keyframes slideIn { from { transform: translateX(-50%) translateY(-100%); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+        .toast-msg { animation: slideIn 0.3s ease-out; }
+        
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .menu-btn { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .menu-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        
+        .xp-bar-container { background: #e2e8f0; border-radius: 9999px; overflow: hidden; height: 10px; width: 100%; margin-top: 4px; }
+        .xp-bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); width: 0%; transition: width 0.5s ease-out; }
+
+        .toggle-checkbox:checked { right: 0; border-color: #3b82f6; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #3b82f6; }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #3b82f6; cursor: pointer; margin-top: -8px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #cbd5e1; border-radius: 2px; }
+        
+        .shop-item { border: 2px solid transparent; transition: all 0.2s; }
+        .shop-item.selected { border-color: #3b82f6; background-color: #eff6ff; }
+        
+        .badge-item { filter: grayscale(100%); opacity: 0.5; transition: all 0.3s; }
+        .badge-item.unlocked { filter: grayscale(0%); opacity: 1; transform: scale(1.05); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+
+        .spinner { border: 4px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 4px solid white; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .avatar-option { border: 3px solid transparent; border-radius: 50%; padding: 2px; cursor: pointer; transition: all 0.2s; }
+        .avatar-option.selected { border-color: #3b82f6; transform: scale(1.1); }
+        
+        /* Çark Animasyonu için CSS */
+        .spin-anim { transition: transform 4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    </style>
+</head>
+<body>
+
+    <canvas id="matrix-canvas"></canvas>
+
+    <!-- LOADING / AD OVERLAY -->
+    <div id="ad-overlay" class="hidden fixed inset-0 z-[100] bg-black text-white flex flex-col items-center justify-center">
+        <div class="spinner mb-4"></div>
+        <h2 class="text-xl font-bold" id="ad-text">İşlem Yapılıyor...</h2>
+    </div>
+
+    <!-- ANA MENÜ -->
+    <div id="main-menu" class="fixed inset-0 flex items-center justify-center z-20">
+        <div class="glass-panel p-6 rounded-3xl shadow-2xl w-full max-w-sm flex flex-col gap-3 border-4 border-blue-200/50 h-[95vh] overflow-y-auto scrollbar-hide">
+            
+            <!-- Profil Kartı -->
+            <div onclick="openProfile()" class="flex items-center gap-3 bg-white p-3 rounded-2xl shadow-sm border border-slate-100 cursor-pointer active:scale-95 transition">
+                <div class="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-2xl overflow-hidden" id="menu-avatar">👤</div>
+                <div class="flex-1">
+                    <div class="font-bold text-slate-800 text-sm" id="menu-username">Misafir</div>
+                    <div class="text-xs text-blue-500 font-semibold" id="menu-rank">Çaylak</div>
+                </div>
+                <div class="text-slate-400">✏️</div>
+            </div>
+
+            <div class="text-center w-full mt-1">
+                <h1 class="text-4xl font-black text-blue-600 tracking-tighter drop-shadow-sm">KELİME<br><span class="text-3xl text-indigo-500">AVCISI</span></h1>
+                
+                <div class="mt-3 bg-slate-100 p-3 rounded-xl border border-slate-200 w-full">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Lvl <span id="menu-level">1</span></span>
+                        <div class="flex items-center gap-1">
+                            <span class="text-xs font-bold text-yellow-600">💎 VIP</span>
+                        </div>
+                    </div>
+                    <div class="xp-bar-container">
+                        <div id="menu-xp-bar" class="xp-bar-fill"></div>
+                    </div>
+                    <div class="text-[10px] text-right text-slate-400 mt-1" id="menu-xp-text">0 XP</div>
+                </div>
+            </div>
+
+            <button id="daily-reward-btn" onclick="openDailySpin()" class="hidden w-full py-2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-xl font-bold text-sm shadow-md animate-bounce flex items-center justify-center gap-2">
+                <span>🎁</span> GÜNLÜK ÖDÜLÜ AL!
+            </button>
+
+            <div class="w-full flex flex-col gap-2.5 mt-2">
+                <button onclick="setGameMode('classic')" class="menu-btn w-full py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-bold text-lg shadow-lg border-b-4 border-blue-700 active:border-b-0 active:translate-y-1 relative overflow-hidden">
+                    <span class="relative z-10">KLASİK MOD</span>
+                </button>
+
+                <button onclick="setGameMode('lightning')" class="menu-btn w-full py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-bold text-lg shadow-lg border-b-4 border-red-700 active:border-b-0 active:translate-y-1 flex items-center justify-center gap-2">
+                    <span>⚡</span> YILDIRIM MODU
+                </button>
+
+                <button onclick="setGameMode('english')" class="menu-btn w-full py-3 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl font-bold text-lg shadow-lg border-b-4 border-indigo-700 active:border-b-0 active:translate-y-1 flex items-center justify-center gap-2">
+                    <span>🇬🇧</span> İNGİLİZCE ÖĞREN
+                </button>
+                
+                <div class="grid grid-cols-2 gap-2 w-full">
+                    <button onclick="openShop()" class="menu-btn py-3 bg-white text-slate-700 rounded-xl font-bold text-sm shadow-md border border-slate-200 flex items-center justify-center gap-1 active:scale-95">
+                        <span>🛒</span> Mağaza
+                    </button>
+                    <button onclick="openStats()" class="menu-btn py-3 bg-white text-slate-700 rounded-xl font-bold text-sm shadow-md border border-slate-200 flex items-center justify-center gap-1 active:scale-95">
+                        <span>🏆</span> Liderlik
+                    </button>
+                </div>
+                
+                <button onclick="openSettings()" class="menu-btn w-full py-2 bg-slate-50 text-slate-500 rounded-xl font-bold text-sm border border-slate-200 active:scale-95">
+                    ⚙️ Ayarlar
+                </button>
+            </div>
+            
+            <div class="text-[10px] text-slate-400 mt-1 font-mono">v13.0 Ultimate</div>
+        </div>
+    </div>
+
+    <!-- PROFIL DÜZENLEME MODALI -->
+    <div id="profile-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-xs mx-4 border-4 border-blue-200 relative">
+            <button onclick="closeProfile()" class="absolute top-2 right-2 text-slate-400 text-xl">✕</button>
+            <h2 class="text-xl font-bold text-center text-slate-800 mb-4">Profilini Düzenle</h2>
+            
+            <div class="mb-4 text-center">
+                <label class="block text-sm text-slate-500 mb-2">Avatar Seç</label>
+                <div class="flex justify-center gap-3 text-3xl">
+                    <div class="avatar-option" onclick="selectAvatar('👤')">👤</div>
+                    <div class="avatar-option" onclick="selectAvatar('🐱')">🐱</div>
+                    <div class="avatar-option" onclick="selectAvatar('🐶')">🐶</div>
+                    <div class="avatar-option" onclick="selectAvatar('🦊')">🦊</div>
+                    <div class="avatar-option" onclick="selectAvatar('🤖')">🤖</div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm text-slate-500 mb-1">Kullanıcı Adı</label>
+                <input type="text" id="username-input" maxlength="12" class="w-full border-2 border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-700 focus:border-blue-500 outline-none text-center" placeholder="İsminiz...">
+            </div>
+
+            <button onclick="saveProfile()" class="w-full bg-blue-500 text-white font-bold py-2 rounded-xl shadow-md">Kaydet</button>
+        </div>
+    </div>
+
+    <!-- OYUN EKRANI -->
+    <div id="game-container" class="hidden fixed inset-0 flex items-center justify-center z-20">
+        <div class="glass-panel p-4 rounded-3xl shadow-2xl w-full max-w-md h-[95vh] flex flex-col relative border-4 border-blue-200/50">
+            <div id="combo-container" class="absolute inset-0 pointer-events-none flex items-center justify-center z-50"></div>
+            <div class="flex flex-col gap-2 mb-1">
+                <div class="flex justify-between items-center">
+                    <button onclick="togglePause()" class="bg-slate-100 p-2 rounded-xl text-slate-500 hover:bg-slate-200 active:scale-90 transition border border-slate-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </button>
+                    <span id="category-badge" class="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">GENEL</span>
+                    <div class="flex flex-col items-end"><span class="text-[10px] text-slate-400 font-bold uppercase tracking-wide" id="timer-label">Süre</span><div class="text-sm font-bold text-slate-600" id="time-text">00:00</div></div>
+                    <div class="flex items-center gap-1">
+                        <button onclick="useBomb()" id="bomb-btn" class="bg-slate-800 text-white p-1.5 rounded-full hover:bg-slate-700 transition active:scale-90 relative"><span class="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center" id="bomb-count-badge">0</span><span class="text-lg">💣</span></button>
+                        <button onclick="useLetterHint()" id="hint-btn" class="bg-yellow-100 text-yellow-600 p-1.5 rounded-full hover:bg-yellow-200 transition active:scale-90"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548 5.478a1 1 0 01-.994.89h-4.66a1 1 0 01-.995-.91l-.547-5.46z" /></svg></button>
+                        <div class="bg-red-100 text-red-500 px-2 py-1 rounded-full font-bold text-sm border border-red-200 flex items-center gap-1 min-w-[3rem] justify-center" id="lives-container"><span>❤️</span> <span id="livesText">6</span></div>
+                    </div>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden"><div id="timer-bar" class="bg-green-500 h-full w-full timer-bar"></div></div>
+            </div>
+            <div id="toast-container" class="absolute top-16 left-1/2 transform -translate-x-1/2 z-20 w-full flex justify-center pointer-events-none"></div>
+            <div id="hangman-drawing" class="flex-grow-0 flex justify-center relative h-28 opacity-90 transition-all">
+                <svg height="110" width="200" class="stroke-slate-700 stroke-[4px] fill-none stroke-linecap-round stroke-linejoin-round">
+                    <path d="M40 100 L120 100" class="stroke-slate-300"></path><path d="M80 100 L80 10 L140 10 L140 30" class="stroke-slate-300"></path><circle id="part-0" cx="140" cy="50" r="15" class="hangman-part hidden-part stroke-red-500" /><path id="part-1" d="M140 65 L140 100" class="hangman-part hidden-part stroke-slate-800" /><path id="part-2" d="M140 75 L120 95" class="hangman-part hidden-part stroke-slate-800" /><path id="part-3" d="M140 75 L160 95" class="hangman-part hidden-part stroke-slate-800" /><path id="part-4" d="M140 100 L125 125" class="hangman-part hidden-part stroke-slate-800" /><path id="part-5" d="M140 100 L155 125" class="hangman-part hidden-part stroke-slate-800" />
+                </svg>
+            </div>
+            <div id="text-clue-area" class="flex flex-col items-center justify-center min-h-[3rem] mb-2 px-2 gap-1"></div>
+            <div id="word-container" class="flex flex-wrap justify-center gap-1.5 mb-2 px-1 min-h-[50px] content-center"></div>
+            <div class="mt-auto pb-4"><div id="keyboard" class="grid grid-cols-7 gap-1 px-1"></div></div>
+        </div>
+    </div>
+
+    <!-- SONUÇ MODAL -->
+    <div id="result-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl text-center max-w-xs mx-4 transform transition-all scale-100 w-full border-4 border-blue-100 relative">
+            <div id="modal-icon" class="text-6xl mb-2">🏆</div>
+            <h2 id="modal-title" class="text-2xl font-bold mb-1 text-slate-800">Tebrikler!</h2>
+            <div class="flex justify-center items-center gap-2 mb-2"><div class="text-sm font-bold text-green-600" id="xp-gain-text">+10 XP</div><div id="level-up-badge" class="hidden bg-yellow-400 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-bounce">LEVEL UP!</div></div>
+            <p id="correct-word-display" class="text-xl font-bold text-blue-600 mb-2 tracking-widest break-words"></p>
+            <div class="bg-blue-50 p-3 rounded-lg mb-4 text-sm text-slate-700 border border-blue-100 text-left relative">
+                <span class="font-bold block text-blue-800 mb-1 text-xs uppercase">Sözlük Anlamı:</span>
+                <span id="word-definition" class="italic text-slate-600"></span>
+                <button onclick="speakWord(currentWordObj.w)" id="speak-btn" class="hidden absolute top-2 right-2 bg-blue-100 p-1.5 rounded-full text-blue-600 hover:bg-blue-200 transition">🔊</button>
+            </div>
+            
+            <div class="space-y-2">
+                <button onclick="watchAd()" id="revive-btn" class="hidden w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center justify-center gap-2 animate-pulse"><span>📺 VİDEO İZLE (+1 HAK)</span></button>
+                <button onclick="shareScore()" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center justify-center gap-2"><span>📤 SKORU PAYLAŞ</span></button>
+                <button onclick="nextRound()" id="next-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center justify-center gap-2"><span>Sıradaki Kelime</span><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg></button>
+                <button onclick="goToMainMenuFromGame()" id="btn-main-menu-end" class="w-full bg-slate-100 text-slate-500 hover:bg-slate-200 font-bold py-2 rounded-xl text-sm hidden">Ana Menüye Dön</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAĞAZA MODALI -->
+    <div id="shop-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-sm mx-4 border-4 border-slate-200 relative h-[85vh] flex flex-col">
+            <button onclick="closeShop()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 z-10"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg></button>
+            <div class="absolute top-4 right-4 bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full font-bold border border-yellow-300 shadow-sm flex items-center gap-1 text-sm"><span>🏆</span><span id="shop-score-display">0</span></div>
+            <h2 class="text-2xl font-bold text-center text-slate-800 mb-4 mt-2">Mağaza</h2>
+            
+            <div class="flex gap-2 mb-4 border-b border-slate-200 pb-2">
+                <button onclick="switchShopTab('items')" id="tab-items" class="flex-1 pb-2 border-b-2 border-blue-500 font-bold text-blue-600">Eşyalar</button>
+                <button onclick="switchShopTab('themes')" id="tab-themes" class="flex-1 pb-2 font-bold text-slate-400">Temalar</button>
+                <button onclick="switchShopTab('money')" id="tab-money" class="flex-1 pb-2 font-bold text-slate-400 text-green-600">Elmaslar</button>
+            </div>
+
+            <div class="overflow-y-auto scrollbar-hide flex-1 space-y-4 px-1" id="shop-content-items">
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+                    <div class="flex items-center gap-3"><div class="bg-red-100 p-2 rounded-lg text-xl">❤️</div><div><div class="font-bold text-slate-700 text-sm">Ekstra Can</div><div class="text-[10px] text-slate-500">+1 Hak</div></div></div>
+                    <button onclick="buyItem('heart', 50)" class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95">50 P</button>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+                    <div class="flex items-center gap-3"><div class="bg-slate-800 text-white p-2 rounded-lg text-xl">💣</div><div><div class="font-bold text-slate-700 text-sm">Bomba Jokeri</div><div class="text-[10px] text-slate-500">4 Harf Sil</div></div></div>
+                    <button onclick="buyItem('bomb', 150)" class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95">150 P</button>
+                </div>
+            </div>
+
+            <div class="hidden overflow-y-auto scrollbar-hide flex-1 space-y-4 px-1" id="shop-content-themes">
+                <div class="grid grid-cols-2 gap-3">
+                    <div onclick="selectTheme('matrix')" id="theme-matrix" class="shop-item cursor-pointer bg-slate-800 p-3 rounded-xl border border-slate-600 relative overflow-hidden group"><div class="text-green-400 font-mono text-center mb-1 text-sm">MATRIX</div><div class="text-center text-xs text-slate-300">Varsayılan</div></div>
+                    <div onclick="buyTheme('cyberpunk', 100)" id="theme-cyberpunk" class="shop-item cursor-pointer bg-purple-900 p-3 rounded-xl border border-purple-500 relative overflow-hidden group"><div class="text-pink-400 font-bold text-center mb-1 text-sm">NEON</div><div id="price-cyberpunk" class="text-center text-xs text-white bg-purple-700 rounded py-0.5 mt-1">100 P</div></div>
+                    <div onclick="buyTheme('paper', 200)" id="theme-paper" class="shop-item cursor-pointer bg-yellow-50 p-3 rounded-xl border border-yellow-200 relative overflow-hidden group"><div class="text-slate-800 font-serif text-center mb-1 text-sm">KAĞIT</div><div id="price-paper" class="text-center text-xs text-slate-600 bg-yellow-200 rounded py-0.5 mt-1">200 P</div></div>
+                </div>
+            </div>
+
+            <div class="hidden overflow-y-auto scrollbar-hide flex-1 space-y-4 px-1" id="shop-content-money">
+                <div class="bg-yellow-50 p-4 rounded-xl border border-yellow-200 flex items-center justify-between">
+                    <div class="flex items-center gap-3"><div class="text-3xl">💎</div><div><div class="font-bold text-slate-800 text-sm">1000 Puan</div><div class="text-[10px] text-slate-500">Hızlı Başlangıç Paketi</div></div></div>
+                    <button onclick="simulatePurchase('1000 Puan', '19.99 TL')" class="bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold active:scale-95">19.99 TL</button>
+                </div>
+                <div class="bg-purple-50 p-4 rounded-xl border border-purple-200 flex items-center justify-between">
+                    <div class="flex items-center gap-3"><div class="text-3xl">👑</div><div><div class="font-bold text-slate-800 text-sm">Reklamları Kaldır</div><div class="text-[10px] text-slate-500">Kesintisiz Oyun Keyfi</div></div></div>
+                    <button onclick="simulatePurchase('No Ads', '49.99 TL')" class="bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold active:scale-95">49.99 TL</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- İSTATİSTİK & LİDERLİK TABLOSU -->
+    <div id="stats-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-sm mx-4 border-4 border-blue-200 relative">
+            <button onclick="document.getElementById('stats-modal').classList.add('hidden')" class="absolute top-3 right-3 text-slate-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            <h2 class="text-2xl font-bold text-center text-slate-800 mb-4">Liderlik & İstatistik</h2>
+            <div class="flex gap-2 mb-4 border-b border-slate-200 pb-2 text-sm"><button onclick="switchStatsTab('stats')" id="tab-stat-main" class="flex-1 font-bold text-blue-600 border-b-2 border-blue-500 pb-1">İstatistikler</button><button onclick="switchStatsTab('leaderboard')" id="tab-stat-leader" class="flex-1 font-bold text-slate-400 pb-1">Sıralama</button></div>
+            <div id="stats-content-main"><div class="space-y-3 text-sm"><div class="flex justify-between border-b pb-1"><span class="text-slate-500">Oynanan Oyun</span><span class="font-bold text-blue-600" id="stat-played">0</span></div><div class="flex justify-between border-b pb-1"><span class="text-slate-500">En İyi Seri</span><span class="font-bold text-orange-500" id="stat-streak">0</span></div></div><h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mt-4 mb-2">Rozet Müzesi</h3><div class="grid grid-cols-4 gap-2" id="badges-grid"></div></div>
+            <div id="stats-content-leaderboard" class="hidden h-48 overflow-y-auto scrollbar-hide"><div class="space-y-2 text-sm" id="leaderboard-list"></div></div>
+        </div>
+    </div>
+
+    <!-- DİĞER MODALLAR (AYARLAR, KATEGORİ, PAUSE, REHBER, RATE, ÇARK) -->
+    <div id="settings-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center z-50"><div class="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-sm mx-4 border-4 border-slate-200 relative"><button onclick="closeSettings()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button><h2 class="text-2xl font-bold text-center text-slate-800 mb-6 flex items-center justify-center gap-2"><span>⚙️</span> Ayarlar</h2><div class="mb-6"><label class="flex justify-between text-slate-700 font-bold mb-2"><span>Ses Seviyesi</span><span id="volume-val" class="text-blue-600">50%</span></label><input type="range" min="0" max="100" value="50" id="volume-slider" class="w-full" oninput="updateVolume(this.value)"></div><div class="space-y-4 mb-8"><div class="flex items-center justify-between"><span class="text-slate-700 font-medium">Titreşim</span><div class="relative inline-block w-12 h-6 align-middle select-none transition duration-200 ease-in"><input type="checkbox" name="toggle" id="vibrate-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-300 left-0 transition-all duration-300" onchange="toggleVibration()"><label for="vibrate-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-300 cursor-pointer transition-colors duration-300"></label></div></div><div class="flex items-center justify-between"><div class="flex flex-col"><span class="text-slate-700 font-medium">Matrix Efekti</span><span class="text-[10px] text-slate-400">Kapatmak pil ömrünü uzatır</span></div><div class="relative inline-block w-12 h-6 align-middle select-none transition duration-200 ease-in"><input type="checkbox" name="toggle" id="matrix-toggle" checked class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-300 left-0 transition-all duration-300" onchange="toggleMatrix()"><label for="matrix-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-300 cursor-pointer transition-colors duration-300"></label></div></div><div class="flex items-center justify-between"><div class="flex flex-col"><span class="text-slate-700 font-medium">Müzik</span><span class="text-[10px] text-slate-400">Arka plan sesi</span></div><div class="relative inline-block w-12 h-6 align-middle select-none transition duration-200 ease-in"><input type="checkbox" name="toggle" id="music-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-300 left-0 transition-all duration-300" onchange="toggleMusic()"><label for="music-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-300 cursor-pointer transition-colors duration-300"></label></div></div></div><div class="border-t border-slate-200 pt-4"><button onclick="resetProgress()" class="w-full py-3 bg-red-50 text-red-600 rounded-xl font-bold text-sm hover:bg-red-100 transition flex items-center justify-center gap-2"><span>🗑️</span> İlerlemeyi Sıfırla</button></div></div></div>
+    <div id="category-screen" class="hidden fixed inset-0 flex items-center justify-center z-20"><div class="glass-panel p-6 rounded-3xl shadow-2xl w-full max-w-md h-[85vh] flex flex-col border-4 border-blue-200/50 relative"><button onclick="playClick(); goToMainMenu()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg></button><div class="absolute top-4 right-4 bg-yellow-100 text-yellow-700 px-4 py-2 rounded-xl font-bold border border-yellow-300 shadow-sm flex items-center gap-2"><span class="text-xl">🏆</span><span id="score-display" class="text-xl">0</span></div><h2 class="text-3xl font-bold text-center text-blue-600 mb-2 mt-12">Kategoriler</h2><div class="overflow-y-auto scrollbar-hide flex-1 pb-4"><div class="grid grid-cols-2 gap-3 categories-grid"></div></div></div></div>
+    <div id="pause-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center z-50"><div class="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-xs mx-4 w-full border-4 border-slate-200"><div class="text-6xl mb-4">⏸️</div><h2 class="text-2xl font-bold text-slate-800 mb-6">Oyun Duraklatıldı</h2><div class="flex flex-col gap-3"><button onclick="togglePause()" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95">Devam Et</button><button onclick="goToMainMenuFromGame()" class="w-full bg-red-100 text-red-600 hover:bg-red-200 font-bold py-3 rounded-xl active:scale-95">Ana Menüye Dön</button></div></div></div>
+    <div id="spin-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center z-50"><div class="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-xs mx-4 border-4 border-orange-200 flex flex-col items-center relative"><button onclick="closeSpin()" class="absolute top-2 right-2 text-slate-400 hover:text-slate-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button><h2 class="text-2xl font-bold text-orange-600 mb-4">Günlük Şans</h2><div class="relative w-48 h-48 mb-6"><div id="wheel" class="spin-wheel w-full h-full rounded-full border-4 border-orange-400 relative overflow-hidden bg-slate-100 shadow-inner"><div class="absolute top-0 left-0 w-full h-full" style="background: conic-gradient(#3b82f6 0deg 90deg, #f59e0b 90deg 180deg, #10b981 180deg 270deg, #ef4444 270deg 360deg);"></div><div class="absolute inset-0 flex items-center justify-center"><div class="w-2 h-2 bg-white rounded-full z-10"></div></div><span class="absolute top-8 left-12 text-white font-bold text-xs rotate-45 pointer-events-none">200 P</span><span class="absolute bottom-8 right-12 text-white font-bold text-xs rotate-45 pointer-events-none">100 XP</span><span class="absolute top-8 right-12 text-white font-bold text-xs -rotate-45 pointer-events-none">+1 ❤️</span><span class="absolute bottom-8 left-12 text-white font-bold text-xs -rotate-45 pointer-events-none">+1 💣</span></div><div class="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[15px] border-t-slate-800 z-20"></div></div><button onclick="spinWheel()" id="spin-btn" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all">ÇEVİR!</button></div></div>
+    <div id="tutorial-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center z-50"><div class="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-sm mx-4 border-4 border-blue-200 relative text-center"><h2 class="text-2xl font-bold text-blue-600 mb-4">Hoş Geldin! 👋</h2><div class="space-y-4 text-left text-sm text-slate-600"><div class="flex items-center gap-3"><div class="bg-blue-100 p-2 rounded-lg text-lg">💡</div><p>Kelimeleri bul, puan ve XP kazanarak seviye atla.</p></div><div class="flex items-center gap-3"><div class="bg-yellow-100 p-2 rounded-lg text-lg">🛍️</div><p>Kazandığın puanlarla <span class="font-bold">Bomba</span> ve <span class="font-bold">Ekstra Can</span> alabilirsin.</p></div><div class="flex items-center gap-3"><div class="bg-red-100 p-2 rounded-lg text-lg">⚡</div><p>Yıldırım modunda süreye karşı yarışırsın!</p></div><div class="flex items-center gap-3"><div class="bg-purple-100 p-2 rounded-lg text-lg">📺</div><p>Oyun biterse reklam izleyip devam edebilirsin!</p></div></div><button onclick="closeTutorial()" class="w-full mt-6 bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95">Başla!</button></div></div>
+    <div id="rate-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center z-50"><div class="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-xs mx-4 border-4 border-yellow-200 text-center relative"><button onclick="closeRate()" class="absolute top-2 right-2 text-slate-400">✕</button><div class="text-4xl mb-2">⭐⭐⭐⭐⭐</div><h2 class="text-xl font-bold text-slate-800 mb-2">Oyunu Sevdin mi?</h2><p class="text-sm text-slate-500 mb-4">Bize mağazada 5 yıldız vererek destek olabilirsin!</p><button onclick="rateApp()" class="w-full bg-yellow-500 text-white font-bold py-2 rounded-xl shadow-md mb-2">Şimdi Oyla</button><button onclick="closeRate()" class="text-slate-400 text-xs underline">Daha Sonra</button></div></div>
+
+    <script>
+        // --- MATRIX EFEKTİ ---
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        const chars = "ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ0123456789";
+
+        // Global ayarlar
+        let masterVolume = parseFloat(localStorage.getItem('ka_volume')) || 0.5;
+        let isVibrationOn = localStorage.getItem('ka_vibrate') !== 'false';
+        let isMatrixOn = localStorage.getItem('ka_matrix') !== 'false';
+        let isMusicOn = localStorage.getItem('ka_music') !== 'false';
+
+        // Profil
+        let username = localStorage.getItem('ka_username') || "Misafir";
+        let avatar = localStorage.getItem('ka_avatar') || "👤";
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if(isMatrixOn && activeTheme === 'matrix') initMatrix();
+        }
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height - canvas.height;
+                this.size = Math.floor(Math.random() * 20) + 12;
+                this.speed = Math.random() * 1.0 + 0.5; 
+                this.text = chars.charAt(Math.floor(Math.random() * chars.length));
+                this.color = `rgba(100, 180, 255, ${Math.random() * 0.5 + 0.1})`;
+            }
+            update() {
+                this.y += this.speed;
+                if (Math.random() < 0.05) this.text = chars.charAt(Math.floor(Math.random() * chars.length));
+                if (this.y > canvas.height) {
+                    this.y = -50;
+                    this.x = Math.random() * canvas.width;
+                    this.speed = Math.random() * 1.0 + 0.5; 
+                }
+            }
+            draw() {
+                ctx.font = `bold ${this.size}px monospace`;
+                ctx.fillStyle = this.color;
+                ctx.fillText(this.text, this.x, this.y);
+            }
+        }
+        function initMatrix() {
+            particles = [];
+            const particleCount = Math.floor(canvas.width / 10); 
+            for (let i = 0; i < particleCount; i++) particles.push(new Particle());
+        }
+        function animateMatrix() {
+            if(!isMatrixOn || activeTheme !== 'matrix') return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => { p.update(); p.draw(); });
+            requestAnimationFrame(animateMatrix);
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // --- OYUN DEĞİŞKENLERİ ---
+        let totalScore = parseInt(localStorage.getItem('ka_score')) || 0;
+        let extraLives = parseInt(localStorage.getItem('ka_extra_lives')) || 0;
+        let bombCount = parseInt(localStorage.getItem('ka_bomb_count')) || 0; 
+        let purchasedThemes = JSON.parse(localStorage.getItem('ka_themes')) || ['matrix'];
+        let activeTheme = localStorage.getItem('ka_active_theme') || 'matrix';
+        let currentLevel = parseInt(localStorage.getItem('ka_level')) || 1;
+        let currentLevelXP = parseInt(localStorage.getItem('ka_current_xp')) || 0;
+        let recentWords = JSON.parse(localStorage.getItem('ka_recent_words')) || []; 
+        const MAX_HISTORY = 25;
+        let stats = JSON.parse(localStorage.getItem('ka_stats')) || { played: 0, won: 0, streak: 0, bestStreak: 0, categories: {} };
+        
+        let currentGameMode = 'classic';
+        let lastCorrectTime = 0;
+        let comboCounter = 0;
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Müzik Döngüsü (Ambient)
+        let musicOscillators = [];
+        function startMusic() {
+            if(!isMusicOn || masterVolume <= 0.01) return;
+            stopMusic();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            // Basit bir drone sesi
+            const createDrone = (freq) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.value = 0.02 * masterVolume;
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                return {osc, gain};
+            };
+            musicOscillators.push(createDrone(110)); // A2
+            musicOscillators.push(createDrone(164.8)); // E3
+        }
+
+        function stopMusic() {
+            musicOscillators.forEach(o => { try{o.osc.stop();}catch(e){} });
+            musicOscillators = [];
+        }
+
+        function playTone(freq, type, duration) {
+            if (masterVolume <= 0.01) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            const vol = 0.1 * masterVolume;
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+        function playClick() { playTone(600, 'sine', 0.1); }
+        function playCorrect() { playTone(800, 'sine', 0.1); setTimeout(() => playTone(1200, 'sine', 0.2), 100); }
+        function playWrong() { playTone(200, 'sawtooth', 0.3); if(isVibrationOn && navigator.vibrate) navigator.vibrate(200); }
+        function playWin() { [400, 500, 600, 800].forEach((f, i) => setTimeout(() => playTone(f, 'square', 0.2), i * 150)); }
+        function playLose() { [400, 300, 200, 100].forEach((f, i) => setTimeout(() => playTone(f, 'sawtooth', 0.3), i * 200)); }
+        function playBuy() { playTone(1000, 'sine', 0.1); setTimeout(() => playTone(1500, 'square', 0.2), 100); }
+        function playCombo() { playTone(1500, 'sine', 0.1); setTimeout(() => playTone(2000, 'square', 0.2), 100); }
+        function playBomb() { playTone(100, 'sawtooth', 0.5); }
+        function playLevelUp() { [300, 400, 500, 600, 800, 1000].forEach((f, i) => setTimeout(() => playTone(f, 'sine', 0.15), i * 100)); }
+
+        // --- SESLİ OKUMA (TTS) ---
+        function speakWord(text) {
+            if ('speechSynthesis' in window && currentGameMode === 'english') {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US'; 
+                utterance.rate = 0.9;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        function initAudioAndStart() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            playClick();
+            if(isMusicOn) startMusic();
+            
+            const tutorialSeen = localStorage.getItem('ka_tutorial_seen');
+            if(!tutorialSeen) {
+                document.getElementById('tutorial-modal').classList.remove('hidden');
+            }
+        }
+        
+        function closeTutorial() {
+            localStorage.setItem('ka_tutorial_seen', 'true');
+            document.getElementById('tutorial-modal').classList.add('hidden');
+        }
+
+        // --- REKLAM SİMÜLASYONU ---
+        function watchAd() {
+            const overlay = document.getElementById('ad-overlay');
+            overlay.classList.remove('hidden');
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+                rewardAdSuccess();
+            }, 3000);
+        }
+
+        function rewardAdSuccess() {
+            if (currentGameMode === 'lightning') {
+                timeLeft += 15; 
+                showToast("Reklam Ödülü: +15 Saniye!", "bg-purple-500");
+            } else {
+                let currentLives = parseInt(livesText.innerText);
+                currentLives++;
+                livesText.innerText = currentLives;
+                mistakes--;
+                if(mistakes < 0) mistakes = 0;
+                const part = document.getElementById(`part-${mistakes}`);
+                if(part) part.classList.remove("visible");
+                showToast("Reklam Ödülü: +1 Can!", "bg-purple-500");
+            }
+            document.getElementById('result-modal').classList.add('hidden');
+            gameActive = true;
+            startTimer();
+        }
+
+        // --- SATIN ALMA SİMÜLASYONU ---
+        function simulatePurchase(item, price) {
+            const overlay = document.getElementById('ad-overlay');
+            const text = document.getElementById('ad-text');
+            text.innerText = "Google Play Bağlanıyor...";
+            overlay.classList.remove('hidden');
+            
+            setTimeout(() => {
+                const confirmBuy = confirm(`Google Play\n\nÜrün: ${item}\nFiyat: ${price}\n\nSatın almayı onayla?`);
+                overlay.classList.add('hidden');
+                text.innerText = "İşlem Yapılıyor...";
+                
+                if(confirmBuy) {
+                    if(item === '1000 Puan') {
+                        totalScore += 1000;
+                        updateProgressionUI();
+                        showToast("Satın Alma Başarılı! +1000 Puan", "bg-green-600");
+                    } else if(item === 'No Ads') {
+                        alert("Reklamlar Kaldırıldı! (Simülasyon)");
+                        showToast("VIP Üyelik Aktif!", "bg-purple-600");
+                    }
+                    playBuy();
+                } else {
+                    showToast("İptal Edildi", "bg-slate-600");
+                }
+            }, 1000);
+        }
+
+        // --- RATE US ---
+        function checkRateUs() {
+            if(stats.played === 5 || stats.played === 20 || stats.played === 50) {
+                const rated = localStorage.getItem('ka_rated');
+                if(!rated) document.getElementById('rate-modal').classList.remove('hidden');
+            }
+        }
+        function closeRate() { document.getElementById('rate-modal').classList.add('hidden'); }
+        function rateApp() {
+            localStorage.setItem('ka_rated', 'true');
+            closeRate();
+            alert("Mağaza linkine yönlendiriliyorsunuz... (Simülasyon)");
+        }
+
+        // --- PROFIL SİSTEMİ ---
+        function openProfile() {
+            playClick();
+            document.getElementById('profile-modal').classList.remove('hidden');
+            document.getElementById('username-input').value = username;
+            highlightAvatar(avatar);
+        }
+        function closeProfile() { document.getElementById('profile-modal').classList.add('hidden'); }
+        function selectAvatar(char) {
+            avatar = char;
+            highlightAvatar(char);
+        }
+        function highlightAvatar(char) {
+            document.querySelectorAll('.avatar-option').forEach(el => {
+                if(el.innerText === char) el.classList.add('selected');
+                else el.classList.remove('selected');
+            });
+        }
+        function saveProfile() {
+            const input = document.getElementById('username-input').value;
+            if(input.trim()) username = input.trim();
+            localStorage.setItem('ka_username', username);
+            localStorage.setItem('ka_avatar', avatar);
+            updateProgressionUI();
+            closeProfile();
+            showToast("Profil Güncellendi!", "bg-blue-500");
+        }
+
+        // --- GÜNLÜK ÖDÜL ---
+        function checkDailyReward() {
+            const lastReward = localStorage.getItem('ka_last_reward_date');
+            const today = new Date().toDateString();
+            if (lastReward !== today) document.getElementById('daily-reward-btn').classList.remove('hidden');
+            else document.getElementById('daily-reward-btn').classList.add('hidden');
+        }
+
+        function openDailySpin() {
+            playClick();
+            document.getElementById('spin-modal').classList.remove('hidden');
+            const btn = document.getElementById('spin-btn');
+            const wheel = document.getElementById('wheel');
+            
+            // Reset state
+            btn.disabled = false;
+            btn.innerText = "ÇEVİR!";
+            btn.className = "w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all";
+            
+            // Reset animation
+            wheel.style.transition = 'none';
+            wheel.style.transform = 'rotate(0deg)';
+            // Force reflow
+            wheel.offsetHeight; 
+            wheel.style.transition = ''; // Restore CSS class transition
+        }
+
+        function spinWheel() {
+            const wheel = document.getElementById('wheel');
+            const btn = document.getElementById('spin-btn');
+            btn.disabled = true;
+            const deg = Math.floor(3600 + Math.random() * 360); 
+            wheel.style.transform = `rotate(${deg}deg)`;
+            setTimeout(() => {
+                const rand = Math.random();
+                let reward = "";
+                if (rand < 0.4) { totalScore += 200; reward = "200 Puan"; } 
+                else if (rand < 0.7) { totalXP += 100; reward = "100 XP"; } 
+                else if (rand < 0.9) { extraLives++; localStorage.setItem('ka_extra_lives', extraLives); reward = "+1 Can"; } 
+                else { bombCount++; localStorage.setItem('ka_bomb_count', bombCount); reward = "+1 Bomba"; }
+                updateProgressionUI();
+                localStorage.setItem('ka_last_reward_date', new Date().toDateString());
+                btn.innerText = `Kazandın: ${reward}`;
+                btn.className = "w-full bg-green-500 text-white font-bold py-3 rounded-xl shadow-lg transform scale-105 cursor-default";
+                document.getElementById('daily-reward-btn').classList.add('hidden');
+                playWin();
+                triggerConfetti();
+            }, 4000);
+        }
+        function closeSpin() { document.getElementById('spin-modal').classList.add('hidden'); }
+
+        // --- İSTATİSTİKLER VE ROZETLER ---
+        const badges = [
+            { id: 'b_first', icon: '🐣', title: 'İlk Adım', desc: '1 Oyun Kazan', check: () => stats.won >= 1 },
+            { id: 'b_streak5', icon: '🔥', title: 'Seri Katil', desc: '5 Galibiyet Serisi', check: () => stats.bestStreak >= 5 },
+            { id: 'b_rich', icon: '💎', title: 'Zengin', desc: '1000 Puan Topla', check: () => totalScore >= 1000 },
+            { id: 'b_survivor', icon: '🛡️', title: 'Survivor', desc: '50 Oyun Oyna', check: () => stats.played >= 50 },
+            { id: 'b_bomb', icon: '💣', title: 'Bombacı', desc: '10 Bomba Kullan', check: () => bombCount === 0 && stats.played > 10 }, 
+            { id: 'b_master', icon: '👑', title: 'Usta', desc: 'Level 10 Ol', check: () => currentLevel >= 10 }
+        ];
+
+        function openStats() {
+            playClick();
+            switchStatsTab('stats');
+            document.getElementById('stats-modal').classList.remove('hidden');
+        }
+
+        function switchStatsTab(tab) {
+            const contentMain = document.getElementById('stats-content-main');
+            const contentLeader = document.getElementById('stats-content-leaderboard');
+            const tabMain = document.getElementById('tab-stat-main');
+            const tabLeader = document.getElementById('tab-stat-leader');
+
+            if (tab === 'stats') {
+                contentMain.classList.remove('hidden');
+                contentLeader.classList.add('hidden');
+                tabMain.className = "flex-1 font-bold text-blue-600 border-b-2 border-blue-500 pb-1";
+                tabLeader.className = "flex-1 font-bold text-slate-400 pb-1";
+                
+                // İstatistikleri Yükle
+                document.getElementById('stat-played').innerText = stats.played;
+                document.getElementById('stat-streak').innerText = stats.bestStreak;
+                
+                const grid = document.getElementById('badges-grid');
+                grid.innerHTML = "";
+                badges.forEach(b => {
+                    const unlocked = b.check();
+                    const div = document.createElement('div');
+                    div.className = `badge-item flex flex-col items-center bg-slate-50 p-2 rounded-lg border border-slate-200 ${unlocked ? 'unlocked' : ''}`;
+                    div.innerHTML = `<div class="text-2xl">${unlocked ? b.icon : '🔒'}</div><div class="text-[8px] font-bold text-slate-600 mt-1 text-center leading-tight">${b.title}</div>`;
+                    grid.appendChild(div);
+                });
+
+            } else {
+                contentMain.classList.add('hidden');
+                contentLeader.classList.remove('hidden');
+                tabMain.className = "flex-1 font-bold text-slate-400 pb-1";
+                tabLeader.className = "flex-1 font-bold text-blue-600 border-b-2 border-blue-500 pb-1";
+                
+                // Sahte Liderlik Tablosu Oluştur
+                const list = document.getElementById('leaderboard-list');
+                list.innerHTML = "";
+                
+                // Sahte veriler (Senin puanına yakın)
+                const fakeUsers = [
+                    { n: "ProGamer99", s: totalScore + 1500 },
+                    { n: "KelimeAvcısı", s: totalScore + 800 },
+                    { n: "Ayşe_Yılmaz", s: totalScore + 250 },
+                    { n: username + " (Sen)", s: totalScore, me: true },
+                    { n: "Ahmet123", s: Math.max(0, totalScore - 120) },
+                    { n: "Zeynep_K", s: Math.max(0, totalScore - 450) }
+                ];
+                
+                fakeUsers.forEach((u, i) => {
+                    const row = document.createElement('div');
+                    row.className = `flex justify-between items-center p-2 rounded-lg ${u.me ? 'bg-yellow-50 border border-yellow-200' : 'bg-slate-50'}`;
+                    row.innerHTML = `<div class="flex items-center gap-2"><span class="font-bold text-slate-400 w-6">#${i+1}</span><span class="font-bold text-slate-700">${u.n}</span></div><div class="font-mono text-blue-600 font-bold">${u.s}</div>`;
+                    list.appendChild(row);
+                });
+            }
+        }
+
+        // --- OYUN MODU ---
+        function setGameMode(mode) {
+            playClick();
+            currentGameMode = mode;
+            if(mode === 'lightning') startGame('Karışık');
+            else showCategoryScreen();
+        }
+
+        // --- DATABASES ---
+        const dbTR = {
+             "Karışık": [],
+             "Mutfak": [
+                { w: "RENDE", d: "Yiyecekleri küçük parçalara ayıran alet.", clues: ["Peynir veya havucu ufalar"] },
+                { w: "KEVGİR", d: "Sıvı süzmeye yarayan delikli kap.", clues: ["Makarna suyunu süzer"] },
+                { w: "ÇIRPICI", d: "Karıştırma teli.", clues: ["Kek yaparken kullanılır"] },
+                { w: "SÜRAHİ", d: "İçecek kabı.", clues: ["Su konur"] },
+                { w: "TİRBUŞON", d: "Şişe açacağı.", clues: ["Mantar tıpa çeker"] },
+                { w: "DAVLUMBAZ", d: "Ocak kokusunu çeken cihaz.", clues: ["Ocağın üstündedir"] },
+                { w: "KAVANOZ", d: "Cam saklama kabı.", clues: ["Turşu kurulur"] },
+                { w: "MERDANE", d: "Hamur açıcı.", clues: ["Silindir şeklindedir"] },
+                { w: "PEÇETE", d: "Ağız silmeye yarar.", clues: ["Kağıt veya kumaş"] },
+                { w: "BLENDER", d: "Karıştırıcı robot.", clues: ["Smoothie yapar"] }
+            ],
+            "Hayvanlar": [
+                { w: "BUKALEMUN", d: "Renk değiştiren sürüngen.", clues: ["Kamuflaj ustası"] },
+                { w: "PELİKAN", d: "Koca gagalı kuş.", clues: ["Gagasında balık saklar"] },
+                { w: "ARMADİLLO", d: "Zırhlı memeli.", clues: ["Top gibi yuvarlanır"] },
+                { w: "YARASA", d: "Uçan memeli.", clues: ["Mağarada ters uyur"] },
+                { w: "KANGURU", d: "Keseli hayvan.", clues: ["Zıplayarak gider"] },
+                { w: "KUNDUZ", d: "Baraj yapan kemirgen.", clues: ["Nehirde yaşar"] },
+                { w: "AHTAPOT", d: "Sekiz kollu deniz canlısı.", clues: ["Mürekkep sıkar"] },
+                { w: "ZÜRAFA", d: "Uzun boyunlu memeli.", clues: ["Ağaç yaprağı yer"] },
+                { w: "PENGUEN", d: "Smokinli kuş.", clues: ["Kutupta yaşar"] },
+                { w: "AKREP", d: "Zehirli eklem bacaklı.", clues: ["Kuyruğu iğnelidir"] }
+            ],
+            "Şehirler": [
+                { w: "ŞANLIURFA", d: "Tarihi şehir.", clues: ["Balıklıgöl buradadır"] },
+                { w: "NEVŞEHİR", d: "Turistik il.", clues: ["Peri bacaları meşhurdur"] },
+                { w: "GAZİANTEP", d: "Mutfak şehri.", clues: ["Baklavası meşhur"] },
+                { w: "ESKİŞEHİR", d: "Öğrenci kenti.", clues: ["Porsuk çayı"] },
+                { w: "AMASYA", d: "Şehzadeler şehri.", clues: ["Elması meşhur"] },
+                { w: "KARS", d: "Doğu ili.", clues: ["Kaşarı meşhur"] },
+                { w: "KONYA", d: "Ova şehri.", clues: ["Mevlana"] },
+                { w: "SAMSUN", d: "Kurtuluş şehri.", clues: ["19 Mayıs"] },
+                { w: "EDİRNE", d: "Sınır kenti.", clues: ["Selimiye Camii"] },
+                { w: "MARDİN", d: "Taş evler şehri.", clues: ["Güneydoğuda"] }
+            ],
+            "Spor": [
+                { w: "OKÇULUK", d: "Hedefi vurma.", clues: ["Yay ve ok kullanılır"] },
+                { w: "ESKRİM", d: "Kılıç sporu.", clues: ["Beyaz kıyafet, maske"] },
+                { w: "HENTBOL", d: "Elle oynanan futbol benzeri oyun.", clues: ["7 kişiyle oynanır"] },
+                { w: "BİLARDO", d: "Masa oyunu.", clues: ["Istaka ve toplar"] },
+                { w: "GÜREŞ", d: "Ata sporu.", clues: ["Kispet giyilir"] },
+                { w: "HALTER", d: "Ağırlık kaldırma.", clues: ["Naim Süleymanoğlu"] },
+                { w: "SÖRF", d: "Dalga sporu.", clues: ["Denizde yapılır"] },
+                { w: "GOLF", d: "Çim saha oyunu.", clues: ["Küçük top, sopa, delik"] },
+                { w: "JUDO", d: "Savunma sanatı.", clues: ["Japon kökenli"] },
+                { w: "ATLETİZM", d: "Koşu, atlama.", clues: ["Olimpiyatın temeli"] }
+            ],
+            "Meslekler": [
+                { w: "ARKEOLOG", d: "Tarihi kazı yapan kişi.", clues: ["Eski eserleri bulur"] },
+                { w: "YAZILIMCI", d: "Kod yazan kişi.", clues: ["Bilgisayar başında çalışır"] },
+                { w: "MARANGOZ", d: "Ahşap ustası.", clues: ["Tahta işler"] },
+                { w: "MİMAR", d: "Bina tasarlar.", clues: ["Proje çizer"] },
+                { w: "PİLOT", d: "Uçak kullanır.", clues: ["Göklerde çalışır"] },
+                { w: "TERZİ", d: "Kıyafet diker.", clues: ["İğne iplik kullanır"] },
+                { w: "AŞÇI", d: "Yemek yapar.", clues: ["Mutfakta çalışır"] },
+                { w: "HAKEM", d: "Maç yönetir.", clues: ["Düdük çalar"] },
+                { w: "ECZACI", d: "İlaç satar.", clues: ["Sağlık sektöründedir"] },
+                { w: "VETERİNER", d: "Hayvan doktoru.", clues: ["Kedi köpek iyileştirir"] }
+            ],
+             "Meyve": [
+                { w: "ANANAS", d: "Tropikal meyve.", clues: ["Dışı sert, içi sarı"] },
+                { w: "KİVİ", d: "Tüylü kabuklu.", clues: ["İçi yeşil, çekirdekli"] },
+                { w: "AVOKADO", d: "Yağlı meyve.", clues: ["Çekirdeği büyüktür"] },
+                { w: "BÖĞÜRTLEN", d: "Orman meyvesi.", clues: ["Rengi koyu mor/siyah"] },
+                { w: "MANDALİNA", d: "Kış meyvesi.", clues: ["Turuncu, dilim dilim"] }
+            ],
+            "Eşya": [
+                { w: "ŞEMSİYE", d: "Koruyucu eşya.", clues: ["Yağmurda açılır"] },
+                { w: "KUMANDA", d: "Yönetim aracı.", clues: ["Televizyonu değiştirir"] },
+                { w: "YASTIK", d: "Uyku aracı.", clues: ["Başı koyarız"] },
+                { w: "AYNA", d: "Yansıtıcı cam.", clues: ["Kendini görürsün"] },
+                { w: "AVİZE", d: "Aydınlatma.", clues: ["Tavandan sarkar"] }
+            ]
+        };
+
+        const dbEN = {
+            "Hayvanlar": [
+                { w: "DOG", d: "Sadık evcil hayvan", clues: ["Havlar"] },
+                { w: "CAT", d: "Bıyıklı evcil hayvan", clues: ["Miyavlar"] },
+                { w: "LION", d: "Orman kralı", clues: ["Kükrer"] },
+                { w: "BIRD", d: "Uçan canlı", clues: ["Kanatları var"] },
+                { w: "FISH", d: "Suda yaşar", clues: ["Solungaçlı"] },
+                { w: "HORSE", d: "Binek hayvanı", clues: ["Yarışlara katılır"] },
+                { w: "TIGER", d: "Çizgili büyük kedi", clues: ["Turuncu siyah"] },
+                { w: "BEAR", d: "Kış uykusuna yatar", clues: ["Bal sever"] },
+                { w: "RABBIT", d: "Uzun kulaklı", clues: ["Havuç sever"] },
+                { w: "MONKEY", d: "Ağaçta yaşar", clues: ["Muz sever"] }
+            ],
+            "Meyve": [
+                { w: "APPLE", d: "Kırmızı/Yeşil meyve", clues: ["Pamuk Prenses"] },
+                { w: "BANANA", d: "Sarı uzun meyve", clues: ["Maymunlar sever"] },
+                { w: "ORANGE", d: "Turuncu meyve", clues: ["C vitamini"] },
+                { w: "LEMON", d: "Ekşi sarı meyve", clues: ["Limonata yapılır"] },
+                { w: "GRAPE", d: "Salkım meyve", clues: ["Şarap yapılır"] },
+                { w: "PEAR", d: "Ampul şekilli meyve", clues: ["Armut"] }
+            ],
+            "Spor": [
+                { w: "FOOTBALL", d: "Ayak topu", clues: ["11 kişi oynanır"] },
+                { w: "TENNIS", d: "Kortta oynanır", clues: ["Raket ve top"] },
+                { w: "SWIMMING", d: "Suda yapılır", clues: ["Havuz veya deniz"] },
+                { w: "BASKETBALL", d: "Pota ve top", clues: ["Elle oynanır"] },
+                { w: "GOLF", d: "Delik ve sopa", clues: ["Çim sahada"] },
+                { w: "BOXING", d: "Dövüş sporu", clues: ["Eldiven takılır"] }
+            ],
+            "Eşya": [
+                { w: "TABLE", d: "Mobilya", clues: ["Yemek yenir"] },
+                { w: "CHAIR", d: "Oturak", clues: ["Masa etrafında"] },
+                { w: "COMPUTER", d: "Elektronik cihaz", clues: ["İnternet"] },
+                { w: "PHONE", d: "İletişim aracı", clues: ["Alo denir"] },
+                { w: "PEN", d: "Yazı aracı", clues: ["Mürekkepli"] },
+                { w: "BAG", d: "Taşıma aracı", clues: ["Sırta takılır"] }
+            ],
+            "Meslekler": [
+                { w: "DOCTOR", d: "İyileştirir", clues: ["Hastane"] },
+                { w: "TEACHER", d: "Öğretir", clues: ["Okul"] },
+                { w: "DRIVER", d: "Sürer", clues: ["Araba/Otobüs"] },
+                { w: "COOK", d: "Pişirir", clues: ["Mutfak"] },
+                { w: "POLICE", d: "Korur", clues: ["Üniforma"] }
+            ],
+            "Renkler": [
+                { w: "RED", d: "Kan rengi", clues: ["Kırmızı"] },
+                { w: "BLUE", d: "Gökyüzü rengi", clues: ["Mavi"] },
+                { w: "GREEN", d: "Çimen rengi", clues: ["Yeşil"] },
+                { w: "BLACK", d: "Gece rengi", clues: ["Siyah"] },
+                { w: "WHITE", d: "Kar rengi", clues: ["Beyaz"] },
+                { w: "YELLOW", d: "Güneş rengi", clues: ["Sarı"] }
+            ],
+            "Fiiller": [
+                { w: "RUN", d: "Hızlı gitmek", clues: ["Koşmak"] },
+                { w: "SLEEP", d: "Dinlenmek", clues: ["Uyumak"] },
+                { w: "EAT", d: "Beslenmek", clues: ["Yemek"] },
+                { w: "DRINK", d: "Sıvı almak", clues: ["İçmek"] },
+                { w: "READ", d: "Kitapla yapılır", clues: ["Okumak"] }
+            ]
+        };
+
+        function getPool(category) {
+            const activeDB = currentGameMode === 'english' ? dbEN : dbTR;
+            if (category === 'Karışık') {
+                let all = [];
+                Object.values(activeDB).forEach(arr => all.push(...arr));
+                if(all.length === 0) return [{w:"TEST", d:"Test verisi", clues:["Test"]}];
+                return all;
+            }
+            return activeDB[category] || activeDB[Object.keys(activeDB)[0]];
+        }
+
+        const alphabet = "ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ".split("");
+        const alphabetEN = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+        
+        let currentWordObj = {};
+        let currentCategory = "Genel";
+        let guessedLetters = [];
+        let mistakes = 0;
+        const maxMistakes = 6;
+        let gameActive = false;
+        let isPaused = false;
+        let timerInterval;
+        let timeLeft = 0;
+        let totalGameTime = 0;
+        
+        const mainMenu = document.getElementById("main-menu");
+        const categoryScreen = document.getElementById("category-screen");
+        const gameContainer = document.getElementById("game-container");
+        const resultModal = document.getElementById("result-modal");
+        const pauseModal = document.getElementById("pause-modal");
+        
+        const wordContainer = document.getElementById("word-container");
+        const keyboard = document.getElementById("keyboard");
+        const livesText = document.getElementById("livesText");
+        const timerBar = document.getElementById("timer-bar");
+        const timeText = document.getElementById("time-text");
+        const categoryBadge = document.getElementById("category-badge");
+        const textClueArea = document.getElementById("text-clue-area");
+        const scoreDisplay = document.getElementById("score-display");
+        const toastContainer = document.getElementById("toast-container");
+        const bombBadge = document.getElementById("bomb-count-badge");
+
+        function getXPForNextLevel(level) { return Math.floor(100 * Math.pow(1.2, level - 1)); }
+
+        function updateProgressionUI() {
+            const requiredXP = getXPForNextLevel(currentLevel);
+            const percentage = Math.min(100, (currentLevelXP / requiredXP) * 100);
+            let rank = "Çaylak";
+            if (currentLevel > 2) rank = "Meraklı";
+            if (currentLevel > 5) rank = "Hacker";
+            if (currentLevel > 10) rank = "Ajan";
+            if (currentLevel > 20) rank = "Seçilmiş Kişi";
+            document.getElementById("menu-level").innerText = currentLevel;
+            document.getElementById("menu-rank").innerText = rank;
+            document.getElementById("menu-xp-bar").style.width = `${percentage}%`;
+            document.getElementById("menu-xp-text").innerText = `${currentLevelXP} / ${requiredXP} XP`;
+            scoreDisplay.innerText = totalScore;
+            if(bombBadge) bombBadge.innerText = bombCount;
+            
+            // Profil Bilgisi
+            document.getElementById("menu-username").innerText = username;
+            document.getElementById("menu-avatar").innerText = avatar;
+        }
+        updateProgressionUI();
+
+        function goToMainMenu() { gameContainer.classList.add("hidden"); categoryScreen.classList.add("hidden"); resultModal.classList.add("hidden"); pauseModal.classList.add("hidden"); mainMenu.classList.remove("hidden"); updateProgressionUI(); checkDailyReward(); stopMusic(); }
+        function goToMainMenuFromGame() { isPaused = false; gameActive = false; clearInterval(timerInterval); goToMainMenu(); }
+        function showCategoryScreen() { mainMenu.classList.add("hidden"); gameContainer.classList.add("hidden"); resultModal.classList.add("hidden"); categoryScreen.classList.remove("hidden"); updateProgressionUI(); renderCategories(); }
+
+        function renderCategories() {
+            const grid = document.querySelector('.categories-grid');
+            grid.innerHTML = "";
+            const activeDB = currentGameMode === 'english' ? dbEN : dbTR;
+            const categories = Object.keys(activeDB);
+            categories.push("Karışık");
+            const colors = [ { bg: "bg-orange-100", txt: "text-orange-700" }, { bg: "bg-green-100", txt: "text-green-700" }, { bg: "bg-purple-100", txt: "text-purple-700" }, { bg: "bg-blue-100", txt: "text-blue-700" }, { bg: "bg-red-100", txt: "text-red-700" }, { bg: "bg-pink-100", txt: "text-pink-700" } ];
+            categories.forEach((cat, index) => {
+                const color = colors[index % colors.length];
+                const btn = document.createElement("button");
+                btn.className = `p-4 rounded-xl ${color.bg} ${color.txt} font-bold text-lg shadow-sm active:scale-95 transition flex justify-between`;
+                btn.innerHTML = `<span>${cat}</span><span>➜</span>`;
+                btn.onclick = () => { playClick(); startGame(cat); };
+                grid.appendChild(btn);
+            });
+        }
+
+        function getNewWord(category) {
+            let pool = getPool(category);
+            let availableWords = pool.filter(wordObj => !recentWords.includes(wordObj.w));
+            if (availableWords.length === 0) availableWords = pool; 
+            const selected = availableWords[Math.floor(Math.random() * availableWords.length)];
+            recentWords.push(selected.w);
+            if (recentWords.length > MAX_HISTORY) recentWords.shift();
+            localStorage.setItem('ka_recent_words', JSON.stringify(recentWords));
+            return selected;
+        }
+
+        function startGame(category) {
+            currentCategory = category; 
+            categoryScreen.classList.add("hidden");
+            mainMenu.classList.add("hidden"); 
+            gameContainer.classList.remove("hidden");
+            
+            if (currentGameMode === 'english') { categoryBadge.innerText = "ENG - " + category.toUpperCase(); } 
+            else if (currentGameMode === 'lightning') { categoryBadge.innerText = "⚡ YILDIRIM"; document.getElementById('hangman-drawing').classList.add('hidden'); } 
+            else { categoryBadge.innerText = category; document.getElementById('hangman-drawing').classList.remove('hidden'); }
+
+            currentWordObj = getNewWord(category);
+            currentWordObj.w = currentWordObj.w.trim().toUpperCase();
+            
+            guessedLetters = [];
+            mistakes = 0;
+            lastCorrectTime = 0;
+            comboCounter = 0;
+            
+            let startingLives = maxMistakes;
+            if(extraLives > 0 && currentGameMode !== 'lightning') {
+                 startingLives += extraLives;
+                 extraLives = 0; 
+                 localStorage.setItem('ka_extra_lives', 0);
+                 showToast("Ekstra canlar yüklendi!", "bg-green-500");
+            }
+            livesText.innerText = currentGameMode === 'lightning' ? "∞" : startingLives;
+            document.getElementById('lives-container').style.display = currentGameMode === 'lightning' ? 'none' : 'flex';
+            
+            gameActive = true;
+            isPaused = false;
+            
+            for (let i = 0; i < 6; i++) { const part = document.getElementById(`part-${i}`); if(part) part.classList.remove("visible"); }
+
+            if (currentGameMode === 'lightning') { timeLeft = 60; totalGameTime = 60; document.getElementById('timer-label').innerText = "Kalan Zaman"; } 
+            else { timeLeft = currentWordObj.w.length * 30; totalGameTime = timeLeft; document.getElementById('timer-label').innerText = "Süre"; }
+            
+            renderClues();
+            startTimer();
+            renderWord();
+            renderKeyboard();
+            updateProgressionUI();
+            
+            // Eğer İngilizce modundaysa ve hoparlör butonu varsa gizle (yeni oyun başladığı için)
+            document.getElementById('speak-btn').classList.add('hidden');
+        }
+
+        function nextRound() { playClick(); resultModal.classList.add("hidden"); startGame(currentCategory); }
+        function togglePause() { if (!gameActive) return; isPaused = !isPaused; if (isPaused) pauseModal.classList.remove("hidden"); else pauseModal.classList.add("hidden"); playClick(); }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            updateTimerUI();
+            timerInterval = setInterval(() => {
+                if(!gameActive) { clearInterval(timerInterval); return; }
+                if(isPaused) return;
+                timeLeft--;
+                updateTimerUI();
+                if (timeLeft <= 0) handleTimeOut();
+            }, 1000);
+        }
+
+        function handleTimeOut() {
+            if (currentGameMode === 'lightning') {
+                gameActive = false;
+                finishGame(false); 
+            } else {
+                mistakes++;
+                let currentLives = parseInt(livesText.innerText);
+                currentLives--;
+                livesText.innerText = currentLives;
+                if(currentLives < 6) drawHangmanPart(5 - currentLives);
+                playWrong();
+                if (currentLives <= 0) { gameActive = false; finishGame(false); } 
+                else {
+                    let unrevealedCount = 0;
+                    for (let char of currentWordObj.w) { if (!guessedLetters.includes(char)) unrevealedCount++; }
+                    const addedTime = unrevealedCount * 30;
+                    timeLeft = addedTime;
+                    totalGameTime = timeLeft;
+                    showToast(`⏳ Süre Doldu! -1 Can.`, "bg-red-500");
+                    gameContainer.classList.add("animate-shake");
+                    setTimeout(() => gameContainer.classList.remove("animate-shake"), 400);
+                    updateTimerUI();
+                }
+            }
+        }
+
+        function updateTimerUI() {
+            let percentage = (timeLeft / totalGameTime) * 100;
+            if(currentGameMode !== 'lightning' && percentage > 100) percentage = 100;
+            if(currentGameMode === 'lightning') percentage = Math.min(100, (timeLeft/60)*100);
+            timerBar.style.width = `${percentage}%`;
+            const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+            const s = (timeLeft % 60).toString().padStart(2, '0');
+            timeText.innerText = `${m}:${s}`;
+            if(timeLeft < 10) timerBar.className = "h-full w-full timer-bar bg-red-500 animate-pulse";
+            else timerBar.className = "h-full w-full timer-bar bg-green-500";
+        }
+
+        function renderWord() {
+            wordContainer.innerHTML = "";
+            const wordLength = currentWordObj.w.length;
+            let boxSizeClass = "w-10 h-12 text-xl"; 
+            if (wordLength > 8) boxSizeClass = "w-8 h-10 text-lg"; 
+            currentWordObj.w.split("").forEach((char) => {
+                const box = document.createElement("div");
+                box.className = `${boxSizeClass} border-b-4 flex items-center justify-center font-bold bg-white rounded-t-lg letter-box select-none ${guessedLetters.includes(char) ? "border-blue-500 text-slate-800" : "border-slate-300 text-transparent"}`;
+                if (guessedLetters.includes(char)) { box.innerText = char; box.classList.add("animate-bounce-custom"); } else box.innerText = "_";
+                wordContainer.appendChild(box);
+            });
+        }
+
+        function renderKeyboard() {
+            keyboard.innerHTML = "";
+            const activeAlpha = currentGameMode === 'english' ? alphabetEN : alphabet;
+            activeAlpha.forEach(letter => {
+                const btn = document.createElement("button");
+                btn.innerText = letter;
+                btn.id = `key-${letter}`; 
+                let baseClass = "h-11 w-full rounded-lg text-lg font-bold shadow-sm border keyboard-btn focus:outline-none touch-manipulation active:scale-95 transition-colors";
+                if (guessedLetters.includes(letter)) {
+                    if (currentWordObj.w.includes(letter)) btn.className = `${baseClass} bg-green-500 text-white border-green-600 opacity-50`;
+                    else btn.className = `${baseClass} bg-slate-200 text-slate-400 border-slate-200 opacity-50`;
+                    btn.disabled = true;
+                } else {
+                    btn.className = `${baseClass} bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600`;
+                    btn.onclick = () => handleGuess(letter);
+                }
+                keyboard.appendChild(btn);
+            });
+        }
+
+        function useBomb() {
+            if(!gameActive || isPaused) return;
+            if(bombCount <= 0) { showToast("Bomba Kalmadı!", "bg-slate-800"); return; }
+            const activeAlpha = currentGameMode === 'english' ? alphabetEN : alphabet;
+            let possibleLetters = activeAlpha.filter(l => !currentWordObj.w.includes(l) && !guessedLetters.includes(l));
+            if(possibleLetters.length === 0) { showToast("Gerek yok!", "bg-yellow-500"); return; }
+            let toRemove = [];
+            for(let i=0; i<4; i++) {
+                if(possibleLetters.length === 0) break;
+                let idx = Math.floor(Math.random() * possibleLetters.length);
+                toRemove.push(possibleLetters[idx]);
+                possibleLetters.splice(idx, 1);
+            }
+            toRemove.forEach(l => {
+                guessedLetters.push(l);
+                const btn = document.getElementById(`key-${l}`);
+                if(btn) {
+                    btn.className = "h-11 w-full rounded-lg text-lg font-bold shadow-sm border keyboard-btn bg-red-100 text-red-300 border-red-200 opacity-60";
+                    btn.disabled = true;
+                    btn.innerText = "💣";
+                }
+            });
+            bombCount--;
+            localStorage.setItem('ka_bomb_count', bombCount);
+            updateProgressionUI();
+            playBomb();
+            showToast("Bomba Patladı!", "bg-red-500");
+        }
+
+        function handleGuess(letter) {
+            if (!gameActive || isPaused || guessedLetters.includes(letter)) return;
+            guessedLetters.push(letter);
+            if (currentWordObj.w.includes(letter)) {
+                if (currentGameMode === 'lightning') { timeLeft += 1; showToast("+1 sn", "bg-green-500"); }
+                const now = Date.now();
+                if (now - lastCorrectTime < 2500) {
+                    comboCounter++;
+                    if (comboCounter > 1) { showComboEffect(comboCounter); currentLevelXP += (comboCounter * 5); playCombo(); }
+                } else { comboCounter = 1; }
+                lastCorrectTime = now;
+                renderWord();
+                playCorrect();
+                checkWin();
+            } else {
+                comboCounter = 0;
+                mistakes++;
+                if (currentGameMode === 'lightning') {
+                    timeLeft -= 5;
+                    showToast("-5 sn", "bg-red-500");
+                    gameContainer.classList.add("animate-shake");
+                    setTimeout(() => gameContainer.classList.remove("animate-shake"), 400);
+                    playWrong();
+                    if(timeLeft <= 0) handleTimeOut();
+                } else {
+                    let currentLives = parseInt(livesText.innerText);
+                    currentLives--;
+                    livesText.innerText = currentLives;
+                    if(currentLives < 6) drawHangmanPart(5 - currentLives);
+                    playWrong();
+                    if(currentLives <= 0) { gameActive = false; finishGame(false); } 
+                    else { gameContainer.classList.add("animate-shake"); setTimeout(() => gameContainer.classList.remove("animate-shake"), 400); }
+                }
+            }
+            renderKeyboard();
+        }
+
+        function showComboEffect(count) {
+            const container = document.getElementById("combo-container");
+            const el = document.createElement("div");
+            el.className = "combo-text";
+            const texts = ["İYİ!", "SÜPER!", "HARİKA!", "HIZLI!", "MÜKEMMEL!", "EFSANE!"];
+            el.innerText = texts[Math.min(count-2, 5)];
+            container.appendChild(el);
+            setTimeout(() => el.remove(), 800);
+        }
+
+        function useLetterHint() {
+            if (!gameActive || isPaused) return;
+            if (currentGameMode === 'lightning') { showToast("Yıldırım modunda ipucu yok!", "bg-red-500"); return; }
+            let currentLives = parseInt(livesText.innerText);
+            if (currentLives <= 2) { showToast("Yetersiz Can!", "bg-yellow-500"); playWrong(); return; }
+            const unrevealed = currentWordObj.w.split("").filter(char => !guessedLetters.includes(char));
+            if (unrevealed.length === 0) return;
+            const randomChar = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+            currentLives -= 2;
+            mistakes += 2;
+            livesText.innerText = currentLives;
+            if(currentLives < 6) { for(let i=0; i < (6 - currentLives); i++) drawHangmanPart(i); }
+            guessedLetters.push(randomChar);
+            playCorrect();
+            renderWord();
+            renderKeyboard();
+            checkWin();
+        }
+
+        function drawHangmanPart(index) {
+            const part = document.getElementById(`part-${index}`);
+            if (part) { part.classList.add("visible"); part.style.strokeDashoffset = "0"; }
+        }
+
+        function checkWin() {
+            const isWon = currentWordObj.w.split("").every(char => guessedLetters.includes(char));
+            if (isWon) finishGame(true);
+        }
+
+        function finishGame(win) {
+            gameActive = false;
+            clearInterval(timerInterval);
+            resultModal.classList.remove("hidden");
+            document.getElementById("correct-word-display").innerText = currentWordObj.w;
+            document.getElementById("word-definition").innerText = currentWordObj.d;
+            const title = document.getElementById("modal-title");
+            const icon = document.getElementById("modal-icon");
+            const xpText = document.getElementById("xp-gain-text");
+            const levelUpBadge = document.getElementById("level-up-badge");
+            const menuBtn = document.getElementById("btn-main-menu-end");
+            const reviveBtn = document.getElementById("revive-btn");
+            const speakBtn = document.getElementById("speak-btn");
+
+            levelUpBadge.classList.add("hidden"); 
+            stats.played++;
+            checkRateUs(); 
+            if(!stats.categories[currentCategory]) stats.categories[currentCategory] = 0;
+            stats.categories[currentCategory]++;
+            if (win) {
+                stats.won++;
+                stats.streak++;
+                if(stats.streak > stats.bestStreak) stats.bestStreak = stats.streak;
+                let earnedXP = (currentWordObj.w.length * 2) + Math.floor(timeLeft / 10);
+                if (currentGameMode === 'lightning') earnedXP *= 2; 
+                totalScore += 50;
+                if(currentGameMode === 'lightning') totalScore += 50; 
+                currentLevelXP += earnedXP;
+                let requiredXP = getXPForNextLevel(currentLevel);
+                if (currentLevelXP >= requiredXP) {
+                    currentLevelXP -= requiredXP;
+                    currentLevel++;
+                    levelUpBadge.classList.remove("hidden");
+                    playLevelUp();
+                    showToast(`Seviye Atladın! ${currentLevel}`, "bg-purple-600");
+                } else { playWin(); }
+                
+                // İngilizce modunda otomatik oku ve butonu göster
+                if(currentGameMode === 'english') { 
+                    speakBtn.classList.remove('hidden');
+                    setTimeout(() => speakWord(currentWordObj.w), 500); 
+                } else {
+                    speakBtn.classList.add('hidden');
+                }
+
+                xpText.innerText = `+${earnedXP} XP`;
+                xpText.classList.remove("hidden");
+                menuBtn.classList.remove("hidden");
+                reviveBtn.classList.add("hidden"); 
+                icon.innerText = "🎉";
+                title.innerText = "Harika!";
+                title.className = "text-2xl font-bold mb-1 text-green-600";
+                triggerConfetti();
+            } else {
+                stats.streak = 0;
+                playLose();
+                xpText.classList.add("hidden");
+                menuBtn.classList.remove("hidden");
+                reviveBtn.classList.remove("hidden"); 
+                icon.innerText = "💀";
+                title.innerText = "Oyun Bitti";
+                title.className = "text-2xl font-bold mb-1 text-red-600";
+                if(currentGameMode === 'english') { 
+                    speakBtn.classList.remove('hidden');
+                    setTimeout(() => speakWord(currentWordObj.w), 1000); 
+                } else {
+                    speakBtn.classList.add('hidden');
+                }
+            }
+            localStorage.setItem('ka_current_xp', currentLevelXP);
+            localStorage.setItem('ka_level', currentLevel);
+            localStorage.setItem('ka_score', totalScore);
+            localStorage.setItem('ka_stats', JSON.stringify(stats));
+            updateProgressionUI();
+        }
+
+        // --- MAĞAZA SEKMELERİ ---
+        function switchShopTab(tab) {
+            playClick();
+            document.getElementById('tab-items').className = tab === 'items' ? "flex-1 pb-2 border-b-2 border-blue-500 font-bold text-blue-600" : "flex-1 pb-2 font-bold text-slate-400";
+            document.getElementById('tab-themes').className = tab === 'themes' ? "flex-1 pb-2 border-b-2 border-blue-500 font-bold text-blue-600" : "flex-1 pb-2 font-bold text-slate-400";
+            document.getElementById('tab-money').className = tab === 'money' ? "flex-1 pb-2 border-b-2 border-blue-500 font-bold text-blue-600" : "flex-1 pb-2 font-bold text-slate-400 text-green-600";
+            document.getElementById('shop-content-items').className = tab === 'items' ? "overflow-y-auto scrollbar-hide flex-1 space-y-4 px-1" : "hidden";
+            document.getElementById('shop-content-themes').className = tab === 'themes' ? "overflow-y-auto scrollbar-hide flex-1 space-y-4 px-1" : "hidden";
+            document.getElementById('shop-content-money').className = tab === 'money' ? "overflow-y-auto scrollbar-hide flex-1 space-y-4 px-1" : "hidden";
+        }
+
+        // --- DİĞER YARDIMCI FONKSİYONLAR ---
+        function shareScore() {
+            const emoji = currentGameMode === 'lightning' ? '⚡' : '🧠';
+            const text = `${emoji} Kelime Avcısı - ${currentWordObj.w}\n🏆 Puan: ${totalScore} | Lvl: ${currentLevel}\n🔥 Seri: ${stats.streak}\n\nSen de oyna!`;
+            if (navigator.share) { navigator.share({ title: 'Kelime Avcısı', text: text }).catch(console.error); } 
+            else {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try { document.execCommand('copy'); showToast("Skor kopyalandı!", "bg-blue-500"); } catch (err) { showToast("Paylaşılamadı", "bg-red-500"); }
+                document.body.removeChild(textArea);
+            }
+        }
+        function triggerConfetti() {
+            const duration = 3000;
+            const end = Date.now() + duration;
+            (function frame() {
+                confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#3b82f6', '#10b981', '#f59e0b'] });
+                confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#3b82f6', '#10b981', '#f59e0b'] });
+                if (Date.now() < end) requestAnimationFrame(frame);
+            }());
+        }
+        function showToast(message, colorClass = "bg-slate-800") {
+            const toast = document.createElement("div");
+            toast.className = `${colorClass} text-white px-4 py-2 rounded-full shadow-lg font-bold text-sm toast-msg mb-2 z-50`;
+            toast.innerText = message;
+            toastContainer.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+        function renderClues() {
+            textClueArea.innerHTML = "";
+            const clues = currentWordObj.clues || ["İpucu yok"];
+            const singleClue = clues.slice(0, 1);
+            singleClue.forEach((clueText) => {
+                const clueDiv = document.createElement("div");
+                clueDiv.className = "text-sm sm:text-base text-slate-600 bg-blue-50 px-3 py-1 rounded-lg border border-blue-100 clue-fade-in shadow-sm w-full text-center truncate";
+                clueDiv.innerHTML = `<span class="font-bold text-blue-500 mr-1">İpucu:</span> ${clueText}`;
+                textClueArea.appendChild(clueDiv);
+            });
+        }
+        function openShop() { playClick(); document.getElementById("shop-score-display").innerText = totalScore; updateShopUI(); document.getElementById('shop-modal').classList.remove('hidden'); }
+        function closeShop() { playClick(); document.getElementById('shop-modal').classList.add('hidden'); }
+        function updateShopUI() {
+             ['matrix', 'cyberpunk', 'paper'].forEach(theme => {
+                const el = document.getElementById(`theme-${theme}`);
+                const priceEl = document.getElementById(`price-${theme}`);
+                if (activeTheme === theme) { el.classList.add('selected'); el.style.borderColor = '#3b82f6'; } else { el.classList.remove('selected'); el.style.borderColor = ''; }
+                if (purchasedThemes.includes(theme)) {
+                    if(priceEl) { priceEl.innerText = "SAHİPSİN"; priceEl.className = "text-center text-xs text-green-700 bg-green-200 rounded py-0.5 mt-1"; }
+                    el.onclick = () => selectTheme(theme);
+                }
+            });
+        }
+        function buyItem(item, cost) {
+            if (totalScore >= cost) {
+                totalScore -= cost; localStorage.setItem('ka_score', totalScore); document.getElementById("shop-score-display").innerText = totalScore; updateProgressionUI();
+                if (item === 'heart') { extraLives++; localStorage.setItem('ka_extra_lives', extraLives); showToast(`❤️ +1 Can!`, "bg-green-500"); }
+                else if (item === 'bomb') { bombCount++; localStorage.setItem('ka_bomb_count', bombCount); showToast(`💣 +1 Bomba!`, "bg-green-500"); }
+                playBuy();
+            } else { showToast("Yetersiz Puan!", "bg-red-500"); playWrong(); }
+        }
+        function buyTheme(theme, cost) {
+            if (purchasedThemes.includes(theme)) { selectTheme(theme); return; }
+            if (totalScore >= cost) {
+                totalScore -= cost; purchasedThemes.push(theme); localStorage.setItem('ka_score', totalScore); localStorage.setItem('ka_themes', JSON.stringify(purchasedThemes));
+                document.getElementById("shop-score-display").innerText = totalScore; showToast(`${theme.toUpperCase()} alındı!`, "bg-green-500"); playBuy(); selectTheme(theme); updateShopUI();
+            } else { showToast("Yetersiz Puan!", "bg-red-500"); playWrong(); }
+        }
+        function selectTheme(theme) {
+            if (!purchasedThemes.includes(theme)) return;
+            activeTheme = theme; localStorage.setItem('ka_active_theme', theme); applyTheme(theme); playClick(); updateShopUI(); showToast(`Tema: ${theme.toUpperCase()}`, "bg-blue-500");
+        }
+        function resetProgress() { if(confirm("Emin misin?")) { localStorage.clear(); location.reload(); } }
+        function closeSettings() { playClick(); document.getElementById('settings-modal').classList.add('hidden'); }
+
+        // --- EKSİK FONKSİYONLAR EKLENDİ ---
+        function openSettings() {
+            playClick();
+            document.getElementById("volume-slider").value = masterVolume * 100;
+            document.getElementById("volume-val").innerText = Math.round(masterVolume * 100) + "%";
+            document.getElementById("vibrate-toggle").checked = isVibrationOn;
+            document.getElementById("matrix-toggle").checked = isMatrixOn;
+            document.getElementById('settings-modal').classList.remove('hidden');
+        }
+
+        function updateVolume(val) {
+            masterVolume = val / 100;
+            document.getElementById("volume-val").innerText = val + "%";
+            localStorage.setItem('ka_volume', masterVolume);
+            if(val > 0 && Math.random() > 0.8) playClick(); 
+        }
+
+        function toggleVibration() {
+            isVibrationOn = !isVibrationOn;
+            localStorage.setItem('ka_vibrate', isVibrationOn);
+            if(isVibrationOn) navigator.vibrate(50);
+        }
+
+        function toggleMatrix() {
+            isMatrixOn = !isMatrixOn;
+            localStorage.setItem('ka_matrix', isMatrixOn);
+            if(isMatrixOn && activeTheme === 'matrix') { 
+                resizeCanvas(); 
+                animateMatrix(); 
+            } else { 
+                const cvs = document.getElementById('matrix-canvas'); 
+                const ctx = cvs.getContext('2d'); 
+                ctx.clearRect(0, 0, cvs.width, cvs.height); 
+            }
+        }
+        function toggleMusic() {
+            isMusicOn = !isMusicOn;
+            localStorage.setItem('ka_music', isMusicOn);
+            if(isMusicOn) startMusic();
+            else stopMusic();
+        }
+    </script>
+</body>
+</html>
